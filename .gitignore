@@ -1,0 +1,11 @@
+# 테라폼 실행 시 생기는 찌꺼기 및 상태 파일 제외
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+*.tfvars.json
+
+# 도커 및 OS 찌꺼기 제외
+.DS_Store
+Thumbs.db
