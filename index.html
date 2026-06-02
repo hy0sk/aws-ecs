@@ -2,15 +2,48 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>무중단 배포 V2 테스트</title>
+    <title>CI/CD 파이프라인 완성!</title>
     <style>
-        body { text-align: center; padding: 50px; font-family: sans-serif; background-color: #f0f8ff; }
-        h1 { color: #00008b; font-size: 50px; }
+        body {
+            background-color: #282c34;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 50px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        h1 {
+            color: #61dafb;
+            font-size: 40px;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 22px;
+            color: #cccccc;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #4caf50;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-    <h1>🚀 무중단 배포 완벽 성공! (Version 2) 🚀</h1>
-    <h2>단 1초의 끊김도 없이 업데이트되었습니다.</h2>
-    <p>이 화면이 보인다면 ALB가 구버전에서 신버전으로 트래픽을 스무스하게 넘겨준 것입니다!</p>
+    <div class="container">
+        <h1>🚀 CI/CD 자동 배포 100% 성공! 🚀</h1>
+        <p>AWS ECS 무중단 배포 파이프라인이 완벽하게 가동 중입니다.</p>
+        <p>현재 버전: <span class="highlight">V2 (GitHub Actions 연동 완료)</span></p>
+        <p>내일은 여기에 슬랙 알림까지 붙일 예정입니다. 😎</p>
+    </div>
 </body>
 </html>
