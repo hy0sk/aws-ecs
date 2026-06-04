@@ -51,6 +51,6 @@ jobs:
         
   # (새로 추가할 디스코드 알림 코드)
     - name: 디스코드 배포 성공 알림 보내기
-       run: |
+      run: |
        curl -H "Content-Type: application/json" \
        -d '{"content": "🚀 **[배포 성공]** 형석님의 AWS ECS 무중단 배포 완료"}' \          ${{ secrets.DISCORD_WEBHOOK }}    
