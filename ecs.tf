@@ -144,3 +144,33 @@ resource "aws_lb_listener" "my_listener" {
     target_group_arn = aws_lb_target_group.alb_tg.arn
   }
 }
+# ---------------------------------------------------
+# ECS 오토스케일링 (Auto Scaling) 설정
+# ---------------------------------------------------
+
+# 1. 오토스케일링 타겟 설정 (컨테이너 최소 1개, 최대 3개)
+resource "aws_appautoscaling_target" "ecs_target" {
+  max_capacity       = 3
+  min_capacity       = 1
+  resource_id        = "service/my-test-cluster/my-web-service" 
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+# 2. 오토스케일링 정책 (CPU 사용량 70% 기준)
+resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
+  name               = "cpu-autoscaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_target.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+    target_value       = 70.0
+    scale_in_cooldown  = 60
+    scale_out_cooldown = 60
+  }
+}
