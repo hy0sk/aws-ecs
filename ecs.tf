@@ -155,6 +155,7 @@ resource "aws_appautoscaling_target" "ecs_target" {
   resource_id        = "service/my-test-cluster/my-web-service" 
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+  depends_on = [aws_ecs_service.my_service]
 }
 
 # 2. 오토스케일링 정책 (CPU 사용량 70% 기준)
@@ -169,7 +170,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
-    target_value       = 70.0
+    target_value       = 10.0
     scale_in_cooldown  = 60
     scale_out_cooldown = 60
   }
