@@ -32,7 +32,7 @@ class PostCreate(BaseModel):
     title: str
     content: str
 
-# API 1: 메인 화면 (UI & 프론트엔드 로직)
+# API 1: 메인 화면 (전통적인 커뮤니티 스타일 UI)
 @app.get("/", response_class=HTMLResponse)
 def read_root():
     html_content = """
@@ -41,187 +41,201 @@ def read_root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AWS 3-Tier 클라우드 게시판</title>
+        <title>AWS 클라우드 갤러리</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
-    <body class="bg-slate-50 font-sans min-h-screen">
-        <header class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-md py-6 px-4 mb-8">
-            <div class="max-w-4xl mx-auto flex justify-between items-center">
-                <h1 class="text-2xl font-bold tracking-wide">🚀 Cloud Architecture Board</h1>
-                <span class="bg-blue-500 text-xs px-3 py-1 rounded-full font-semibold">AWS 3-Tier 완성이틀차</span>
+    <body class="bg-slate-100 font-sans min-h-screen pb-12">
+        <header class="bg-blue-700 text-white shadow-md py-4 mb-6">
+            <div class="max-w-4xl mx-auto px-4 flex justify-between items-center">
+                <h1 class="text-xl font-bold tracking-tight">☁️ Cloud Architecture Board</h1>
+                <span class="bg-blue-800 text-xs px-2 py-1 rounded text-blue-100">AWS 3-Tier</span>
             </div>
         </header>
 
-        <main class="max-w-4xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div class="md:col-span-1 bg-white p-6 rounded-xl shadow-sm h-fit border border-slate-100 sticky top-8">
-                <h2 id="formTitle" class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    ✍️ 새 글 작성하기
-                </h2>
-                <form id="postForm" class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">제목</label>
-                        <input type="text" id="title" required class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="제목을 입력하세요">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">내용</label>
-                        <textarea id="content" rows="4" required class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="내용을 입력하세요"></textarea>
-                    </div>
-                    <button id="submitBtn" type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition text-sm shadow-sm">
-                        등록하기
+        <main class="max-w-4xl mx-auto px-4">
+            <div class="bg-white border border-slate-300 shadow-sm rounded-t-lg">
+                
+                <div class="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50 rounded-t-lg">
+                    <h2 class="text-lg font-bold text-slate-800" id="boardTitle">전체 게시글</h2>
+                    <button id="btnShowWrite" onclick="showWriteForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition">
+                        ✏️ 글쓰기
                     </button>
-                    <button id="cancelBtn" type="button" onclick="cancelEdit()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 rounded-lg transition text-sm shadow-sm mt-2">
-                        수정 취소
-                    </button>
-                </form>
-            </div>
+                </div>
 
-            <div class="md:col-span-2">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold text-slate-800">📋 전체 게시글</h2>
-                    <button onclick="loadPosts()" class="text-xs text-blue-600 hover:underline">🔄 새로고침</button>
+                <div id="listView" class="block">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 bg-slate-100 border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-2.5 w-16 text-center font-semibold">번호</th>
+                                <th class="px-4 py-2.5 font-semibold">제목</th>
+                            </tr>
+                        </thead>
+                        <tbody id="postsList" class="divide-y divide-slate-200">
+                            </tbody>
+                    </table>
                 </div>
-                <div id="postsList" class="space-y-4">
-                    <div class="text-center py-8 text-slate-400 text-sm">게시글을 불러오는 중...</div>
+
+                <div id="readView" class="hidden p-6">
+                    <div class="border-b border-slate-200 pb-4 mb-4">
+                        <h2 id="readTitle" class="text-xl font-bold text-slate-800 mb-3"></h2>
+                        <div class="flex justify-between text-xs text-slate-500">
+                            <span id="readId"></span>
+                            
+                            <div class="relative">
+                                <button onclick="toggleMenu()" class="text-slate-400 hover:text-slate-700 px-2">⋮</button>
+                                <div id="readMenu" class="hidden absolute right-0 mt-1 w-24 bg-white border border-slate-200 shadow-lg rounded z-10">
+                                    <button onclick="editPost()" class="block w-full text-left px-4 py-2 hover:bg-slate-50">수정</button>
+                                    <button onclick="deletePost()" class="block w-full text-left px-4 py-2 text-red-600 hover:bg-red-50">삭제</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="readContent" class="text-slate-700 whitespace-pre-line min-h-[150px] text-sm"></div>
+                    <div class="mt-8 border-t border-slate-200 pt-4 text-right">
+                        <button onclick="showList()" class="bg-slate-500 hover:bg-slate-600 text-white px-4 py-1.5 rounded text-sm font-medium transition">목록으로</button>
+                    </div>
                 </div>
+
+                <div id="writeView" class="hidden p-6 bg-slate-50">
+                    <form id="postForm" class="space-y-4">
+                        <input type="text" id="title" required class="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-sm" placeholder="제목을 입력하세요 (예: 챔스 라인업 평가좀)">
+                        <textarea id="content" rows="10" required class="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-sm resize-none" placeholder="내용을 입력하세요"></textarea>
+                        
+                        <div class="flex justify-end gap-2 pt-2">
+                            <button type="button" onclick="showList()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-medium transition">취소</button>
+                            <button type="submit" id="submitBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-medium transition">등록</button>
+                        </div>
+                    </form>
+                </div>
+                
             </div>
         </main>
 
         <script>
-            let editingId = null; // 수정 중인 글의 ID를 기억하는 공간
+            let currentPosts = []; // 불러온 게시글 데이터를 임시 저장
+            let currentEditId = null; // 현재 읽고 있거나 수정 중인 글 번호
 
-            // 게시글 불러오기
+            // 🟢 게시글 목록 불러오기
             async function loadPosts() {
                 try {
                     const response = await fetch('/posts/');
-                    const posts = await response.json();
+                    currentPosts = await response.json();
                     const postsList = document.getElementById('postsList');
                     
-                    if (posts.length === 0) {
-                        postsList.innerHTML = '<div class="text-center py-12 bg-white rounded-xl border border-dashed text-slate-400 text-sm">등록된 게시글이 없습니다.</div>';
+                    if (currentPosts.length === 0) {
+                        postsList.innerHTML = '<tr><td colspan="2" class="text-center py-8 text-slate-400">등록된 게시글이 없습니다.</td></tr>';
                         return;
                     }
 
-                    postsList.innerHTML = posts.map(post => `
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition hover:shadow-md relative group">
-                            
-                            <div class="absolute top-4 right-3">
-                                <button onclick="toggleMenu(${post.id})" class="text-slate-400 hover:text-slate-600 focus:outline-none p-1">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
-                                </button>
-                                <div id="menu-${post.id}" class="hidden absolute right-0 mt-1 w-20 bg-white rounded-md shadow-lg border border-slate-100 z-10 overflow-hidden">
-                                    <button onclick="startEdit(${post.id})" class="block w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 border-b border-slate-50">수정</button>
-                                    <button onclick="deletePost(${post.id})" class="block w-full text-left px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50">삭제</button>
-                                </div>
-                            </div>
-
-                            <h3 id="post-title-${post.id}" class="font-bold text-slate-800 text-base mb-2 pr-8">${post.title}</h3>
-                            <p id="post-content-${post.id}" class="text-slate-600 text-sm whitespace-pre-line">${post.content}</p>
-                            
-                            <div class="mt-3 pt-3 border-t border-slate-50 flex justify-between items-center text-xs text-slate-400">
-                                <span>📌 번호: ${post.id}</span>
-                                <span class="text-emerald-500 font-medium">● AWS RDS Storage</span>
-                            </div>
-                        </div>
-                    `).reverse().join('');
+                    // 최신 글이 위로 오도록 뒤집어서 테이블 행(tr) 생성
+                    postsList.innerHTML = currentPosts.slice().reverse().map(post => `
+                        <tr class="hover:bg-slate-50 cursor-pointer transition" onclick="showReadView(${post.id})">
+                            <td class="px-4 py-2.5 text-center text-slate-500 w-16">${post.id}</td>
+                            <td class="px-4 py-2.5 text-slate-800 font-medium">${post.title}</td>
+                        </tr>
+                    `).join('');
                 } catch (error) {
                     console.error('Error:', error);
                 }
             }
 
-            // 점 3개 메뉴 열기/닫기
-            function toggleMenu(id) {
-                document.querySelectorAll('[id^="menu-"]').forEach(el => {
-                    if (el.id !== `menu-${id}`) el.classList.add('hidden');
-                });
-                document.getElementById(`menu-${id}`).classList.toggle('hidden');
-            }
-
-            // 바탕화면 클릭 시 열려있는 메뉴 닫기
-            document.addEventListener('click', function(event) {
-                if (!event.target.closest('.relative')) {
-                    document.querySelectorAll('[id^="menu-"]').forEach(el => el.classList.add('hidden'));
-                }
-            });
-
-            // 🟢 게시글 삭제 (DELETE)
-            async function deletePost(id) {
-                if(!confirm("이 게시글을 정말 삭제하시겠습니까?")) return;
+            // 👁️ 글 읽기 화면으로 전환
+            function showReadView(id) {
+                const post = currentPosts.find(p => p.id === id);
+                if(!post) return;
                 
-                try {
-                    await fetch(`/posts/${id}`, { method: 'DELETE' });
-                    loadPosts(); // 삭제 후 새로고침
-                } catch (error) {
-                    console.error('Error:', error);
-                }
-            }
-
-            // 🟠 게시글 수정 모드 켜기
-            function startEdit(id) {
-                const title = document.getElementById(`post-title-${id}`).innerText;
-                const content = document.getElementById(`post-content-${id}`).innerText;
-
-                document.getElementById('title').value = title;
-                document.getElementById('content').value = content;
-                editingId = id; // 수정할 ID 기억
-
-                // 폼 디자인을 '수정 모드'로 변경
-                document.getElementById('formTitle').innerHTML = '📝 글 수정하기';
-                const submitBtn = document.getElementById('submitBtn');
-                submitBtn.innerText = '수정 완료';
-                submitBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
-                submitBtn.classList.replace('hover:bg-blue-700', 'hover:bg-emerald-700');
+                currentEditId = id;
+                document.getElementById('readTitle').innerText = post.title;
+                document.getElementById('readId').innerText = `글번호: ${post.id}`;
+                document.getElementById('readContent').innerText = post.content;
                 
-                document.getElementById('cancelBtn').classList.remove('hidden');
-                document.getElementById(`menu-${id}`).classList.add('hidden'); // 메뉴 닫기
-                window.scrollTo({ top: 0, behavior: 'smooth' }); // 위로 부드럽게 스크롤
+                document.getElementById('listView').classList.add('hidden');
+                document.getElementById('writeView').classList.add('hidden');
+                document.getElementById('btnShowWrite').classList.add('hidden');
+                document.getElementById('readView').classList.remove('hidden');
+                document.getElementById('boardTitle').innerText = '게시글 읽기';
+                document.getElementById('readMenu').classList.add('hidden'); // 메뉴 닫아두기
             }
 
-            // 🔘 수정 취소 (원래대로)
-            function cancelEdit() {
-                editingId = null;
+            // ✏️ 글쓰기 화면으로 전환
+            function showWriteForm() {
+                currentEditId = null;
                 document.getElementById('title').value = '';
                 document.getElementById('content').value = '';
-                
-                document.getElementById('formTitle').innerHTML = '✍️ 새 글 작성하기';
-                const submitBtn = document.getElementById('submitBtn');
-                submitBtn.innerText = '등록하기';
-                submitBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
-                submitBtn.classList.replace('hover:bg-emerald-700', 'hover:bg-blue-700');
-                
-                document.getElementById('cancelBtn').classList.add('hidden');
+                document.getElementById('submitBtn').innerText = '등록';
+
+                document.getElementById('listView').classList.add('hidden');
+                document.getElementById('readView').classList.add('hidden');
+                document.getElementById('btnShowWrite').classList.add('hidden');
+                document.getElementById('writeView').classList.remove('hidden');
+                document.getElementById('boardTitle').innerText = '새 글 작성';
             }
 
-            // 🔵 폼 제출 (POST:등록 / PUT:수정)
+            // 📋 다시 목록 화면으로 전환
+            function showList() {
+                document.getElementById('writeView').classList.add('hidden');
+                document.getElementById('readView').classList.add('hidden');
+                document.getElementById('listView').classList.remove('hidden');
+                document.getElementById('btnShowWrite').classList.remove('hidden');
+                document.getElementById('boardTitle').innerText = '전체 게시글';
+                loadPosts();
+            }
+
+            // 점 3개 메뉴 토글
+            function toggleMenu() {
+                document.getElementById('readMenu').classList.toggle('hidden');
+            }
+
+            // 🟠 수정 버튼 클릭 시 폼 세팅
+            function editPost() {
+                const post = currentPosts.find(p => p.id === currentEditId);
+                document.getElementById('title').value = post.title;
+                document.getElementById('content').value = post.content;
+                document.getElementById('submitBtn').innerText = '수정 완료';
+
+                document.getElementById('readView').classList.add('hidden');
+                document.getElementById('writeView').classList.remove('hidden');
+                document.getElementById('boardTitle').innerText = '글 수정하기';
+            }
+
+            // 🔴 삭제 버튼 클릭
+            async function deletePost() {
+                if(!confirm("정말 삭제하시겠습니까?")) return;
+                try {
+                    await fetch(`/posts/${currentEditId}`, { method: 'DELETE' });
+                    showList(); // 삭제 후 목록으로
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+            }
+
+            // 🔵 폼 전송 (등록 또는 수정)
             document.getElementById('postForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const title = document.getElementById('title').value;
                 const content = document.getElementById('content').value;
 
                 try {
-                    if (editingId) {
-                        // 수정 중일 때
-                        await fetch(`/posts/${editingId}`, {
+                    if (currentEditId) {
+                        await fetch(`/posts/${currentEditId}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ title, content })
                         });
-                        cancelEdit(); // 폼 초기화
                     } else {
-                        // 새 글일 때
                         await fetch('/posts/', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ title, content })
                         });
-                        document.getElementById('title').value = '';
-                        document.getElementById('content').value = '';
                     }
-                    loadPosts(); // 목록 새로고침
+                    showList(); // 완료 후 목록으로
                 } catch (error) {
                     console.error('Error:', error);
                 }
             });
 
+            // 초기 로딩 시 리스트 불러오기
             window.onload = loadPosts;
         </script>
     </body>
@@ -248,7 +262,7 @@ def create_post(post: PostCreate):
     db.close()
     return {"message": "Success"}
 
-# 🚀 API 4: 게시글 수정 (PUT) 추가
+# API 4: 게시글 수정 (PUT)
 @app.put("/posts/{post_id}")
 def update_post(post_id: int, post: PostCreate):
     db = SessionLocal()
@@ -260,7 +274,7 @@ def update_post(post_id: int, post: PostCreate):
     db.close()
     return {"message": "Updated"}
 
-# 🚀 API 5: 게시글 삭제 (DELETE) 추가
+# API 5: 게시글 삭제 (DELETE)
 @app.delete("/posts/{post_id}")
 def delete_post(post_id: int):
     db = SessionLocal()
