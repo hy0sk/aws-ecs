@@ -1,5 +1,3 @@
-# ecs.tf
-
 # 1. ECS 클러스터 (운동장) 생성
 resource "aws_ecs_cluster" "my_cluster" {
   name = "my-test-cluster"
@@ -18,20 +16,29 @@ resource "aws_ecs_task_definition" "my_task" {
   container_definitions = jsonencode([
     {
       name      = "my-web-container"
-      image     = "735391218724.dkr.ecr.ap-northeast-2.amazonaws.com/my-test-web-repo:latest" # ★ 여기에 어제 복사한 ECR 주소(latest 포함)를 붙여넣으세요! ★
+      image     = "735391218724.dkr.ecr.ap-northeast-2.amazonaws.com/my-test-web-repo:latest"
       cpu       = 256
       memory    = 512
       essential = true
       portMappings = [
         {
-          containerPort = 80 # Nginx 기본 포트 (도커 컨테이너 내부 포트)
+          containerPort = 80 # 컨테이너 내부 포트 (FastAPI 앱이 80번 포트에서 실행됨)
           hostPort      = 80
           protocol      = "tcp"
         }
+      ],
+      # 👇 여기에 파이썬이 DB에 접속할 수 있도록 환경 변수를 추가합니다!
+      environment = [
+        # replace 함수로 주소 뒤에 붙은 ':3306' 포트 번호를 깔끔하게 떼어줍니다.
+        { name = "DB_HOST", value = replace(data.terraform_remote_state.base.outputs.db_endpoint, ":3306", "") },
+        { name = "DB_USER", value = "admin" },
+        { name = "DB_PASS", value = "password1234!" },
+        { name = "DB_NAME", value = "community_db" }
       ]
     }
   ])
 }
+
 # 3. 내 AWS 계정의 기본 VPC와 서브넷 정보 자동으로 가져오기 (마법의 코드!)
 data "aws_vpc" "default" {
   default = true
@@ -50,11 +57,12 @@ resource "aws_security_group" "ecs_sg" {
   description = "Allow HTTP inbound traffic for ECS Fargate"
   vpc_id      = data.aws_vpc.default.id
 
+  # ★ 실무 레벨 보안 강화: 아무나 못 들어오게 0.0.0.0/0 을 지우고 ALB만 허용!
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id] 
   }
 
   egress {
@@ -79,71 +87,12 @@ resource "aws_ecs_service" "my_service" {
     assign_public_ip = true # 우리가 인터넷으로 접속해야 하니 공인 IP 부여!
   }
   load_balancer {
-    target_group_arn = aws_lb_target_group.alb_tg.arn
+    target_group_arn = aws_lb_target_group.my_tg.arn # ★ alb.tf의 타겟그룹 이름(my_tg)과 연결 완료!
     container_name   = "my-web-container" # Task Definition에 적었던 내 컨테이너 이름
     container_port   = 80
   }
 }
-# 6. ALB(로드밸런서) 전용 보안 그룹
-resource "aws_security_group" "alb_sg" {
-  name        = "alb-web-sg"
-  description = "Allow HTTP traffic to ALB"
-  vpc_id      = data.aws_vpc.default.id # 2일 차에 부활시킨 기본 VPC 재활용!
 
-  # 외부 인터넷(0.0.0.0/0)에서 들어오는 80번(HTTP) 포트 접속 허용
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # 밖으로 나가는 트래픽은 전부 허용
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-# 7. 타겟 그룹 (로드밸런서가 트래픽을 토스해줄 목적지 명단)
-resource "aws_lb_target_group" "alb_tg" {
-  name        = "my-ecs-tg"
-  port        = 80
-  protocol    = "HTTP"
-  target_type = "ip" # Fargate는 가상 머신(EC2)이 아니라 IP 단위로 할당되므로 무조건 ip 모드를 씁니다.
-  vpc_id      = data.aws_vpc.default.id
-
-  # 헬스 체크 (로드밸런서가 "너 살아있니?" 하고 주기적으로 찔러보는 설정)
-  health_check {
-    path                = "/"
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 3
-    interval            = 30
-  }
-}
-
-# 8. ALB 본체 (진짜 로드밸런서)
-resource "aws_lb" "my_alb" {
-  name               = "my-web-alb"
-  internal           = false # 외부 인터넷에서 접속할 거니까 false (내부망 전용이면 true)
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb_sg.id] # 아까 1단계에서 만든 ALB 전용 출입문 연결!
-  subnets            = data.aws_subnets.default.ids   # 마법의 코드(기본 서브넷) 재활용!
-}
-
-# 9. 리스너 (ALB의 귀: "80번 포트로 들어오는 트래픽을 타겟 그룹으로 보내라!")
-resource "aws_lb_listener" "my_listener" {
-  load_balancer_arn = aws_lb.my_alb.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.alb_tg.arn
-  }
-}
 # ---------------------------------------------------
 # ECS 오토스케일링 (Auto Scaling) 설정
 # ---------------------------------------------------
@@ -155,7 +104,7 @@ resource "aws_appautoscaling_target" "ecs_target" {
   resource_id        = "service/my-test-cluster/my-web-service" 
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
-  depends_on = [aws_ecs_service.my_service]
+  depends_on         = [aws_ecs_service.my_service]
 }
 
 # 2. 오토스케일링 정책 (CPU 사용량 70% 기준)
