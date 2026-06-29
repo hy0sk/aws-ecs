@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -33,7 +32,7 @@ class PostCreate(BaseModel):
     title: str
     content: str
 
-# API 1: 🌟 메인 화면을 예쁜 HTML/CSS 게시판으로 교체!
+# API 1: 메인 화면 (UI & 프론트엔드 로직)
 @app.get("/", response_class=HTMLResponse)
 def read_root():
     html_content = """
@@ -54,8 +53,8 @@ def read_root():
         </header>
 
         <main class="max-w-4xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div class="md:col-span-1 bg-white p-6 rounded-xl shadow-sm h-fit border border-slate-100">
-                <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <div class="md:col-span-1 bg-white p-6 rounded-xl shadow-sm h-fit border border-slate-100 sticky top-8">
+                <h2 id="formTitle" class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                     ✍️ 새 글 작성하기
                 </h2>
                 <form id="postForm" class="space-y-4">
@@ -67,8 +66,11 @@ def read_root():
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">내용</label>
                         <textarea id="content" rows="4" required class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="내용을 입력하세요"></textarea>
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition text-sm shadow-sm">
+                    <button id="submitBtn" type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition text-sm shadow-sm">
                         등록하기
+                    </button>
+                    <button id="cancelBtn" type="button" onclick="cancelEdit()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 rounded-lg transition text-sm shadow-sm mt-2">
+                        수정 취소
                     </button>
                 </form>
             </div>
@@ -85,7 +87,9 @@ def read_root():
         </main>
 
         <script>
-            // 1. 서버에서 게시글 목록 받아와서 화면에 뿌리기 (GET)
+            let editingId = null; // 수정 중인 글의 ID를 기억하는 공간
+
+            // 게시글 불러오기
             async function loadPosts() {
                 try {
                     const response = await fetch('/posts/');
@@ -93,49 +97,131 @@ def read_root():
                     const postsList = document.getElementById('postsList');
                     
                     if (posts.length === 0) {
-                        postsList.innerHTML = '<div class="text-center py-12 bg-white rounded-xl border border-dashed text-slate-400 text-sm">아직 등록된 게시글이 없습니다. 첫 글을 남겨보세요!</div>';
+                        postsList.innerHTML = '<div class="text-center py-12 bg-white rounded-xl border border-dashed text-slate-400 text-sm">등록된 게시글이 없습니다.</div>';
                         return;
                     }
 
                     postsList.innerHTML = posts.map(post => `
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition hover:shadow-md">
-                            <h3 class="font-bold text-slate-800 text-base mb-2">${post.title}</h3>
-                            <p class="text-slate-600 text-sm whitespace-pre-line">${post.content}</p>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 transition hover:shadow-md relative group">
+                            
+                            <div class="absolute top-4 right-3">
+                                <button onclick="toggleMenu(${post.id})" class="text-slate-400 hover:text-slate-600 focus:outline-none p-1">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+                                </button>
+                                <div id="menu-${post.id}" class="hidden absolute right-0 mt-1 w-20 bg-white rounded-md shadow-lg border border-slate-100 z-10 overflow-hidden">
+                                    <button onclick="startEdit(${post.id})" class="block w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 border-b border-slate-50">수정</button>
+                                    <button onclick="deletePost(${post.id})" class="block w-full text-left px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50">삭제</button>
+                                </div>
+                            </div>
+
+                            <h3 id="post-title-${post.id}" class="font-bold text-slate-800 text-base mb-2 pr-8">${post.title}</h3>
+                            <p id="post-content-${post.id}" class="text-slate-600 text-sm whitespace-pre-line">${post.content}</p>
+                            
                             <div class="mt-3 pt-3 border-t border-slate-50 flex justify-between items-center text-xs text-slate-400">
                                 <span>📌 번호: ${post.id}</span>
                                 <span class="text-emerald-500 font-medium">● AWS RDS Storage</span>
                             </div>
                         </div>
-                    `).reverse().join(''); // 최신글이 맨 위로 오도록 반전
+                    `).reverse().join('');
                 } catch (error) {
                     console.error('Error:', error);
                 }
             }
 
-            // 2. 폼 제출 시 서버로 데이터 보내기 (POST)
+            // 점 3개 메뉴 열기/닫기
+            function toggleMenu(id) {
+                document.querySelectorAll('[id^="menu-"]').forEach(el => {
+                    if (el.id !== `menu-${id}`) el.classList.add('hidden');
+                });
+                document.getElementById(`menu-${id}`).classList.toggle('hidden');
+            }
+
+            // 바탕화면 클릭 시 열려있는 메뉴 닫기
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('.relative')) {
+                    document.querySelectorAll('[id^="menu-"]').forEach(el => el.classList.add('hidden'));
+                }
+            });
+
+            // 🟢 게시글 삭제 (DELETE)
+            async function deletePost(id) {
+                if(!confirm("이 게시글을 정말 삭제하시겠습니까?")) return;
+                
+                try {
+                    await fetch(`/posts/${id}`, { method: 'DELETE' });
+                    loadPosts(); // 삭제 후 새로고침
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+            }
+
+            // 🟠 게시글 수정 모드 켜기
+            function startEdit(id) {
+                const title = document.getElementById(`post-title-${id}`).innerText;
+                const content = document.getElementById(`post-content-${id}`).innerText;
+
+                document.getElementById('title').value = title;
+                document.getElementById('content').value = content;
+                editingId = id; // 수정할 ID 기억
+
+                // 폼 디자인을 '수정 모드'로 변경
+                document.getElementById('formTitle').innerHTML = '📝 글 수정하기';
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.innerText = '수정 완료';
+                submitBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
+                submitBtn.classList.replace('hover:bg-blue-700', 'hover:bg-emerald-700');
+                
+                document.getElementById('cancelBtn').classList.remove('hidden');
+                document.getElementById(`menu-${id}`).classList.add('hidden'); // 메뉴 닫기
+                window.scrollTo({ top: 0, behavior: 'smooth' }); // 위로 부드럽게 스크롤
+            }
+
+            // 🔘 수정 취소 (원래대로)
+            function cancelEdit() {
+                editingId = null;
+                document.getElementById('title').value = '';
+                document.getElementById('content').value = '';
+                
+                document.getElementById('formTitle').innerHTML = '✍️ 새 글 작성하기';
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.innerText = '등록하기';
+                submitBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
+                submitBtn.classList.replace('hover:bg-emerald-700', 'hover:bg-blue-700');
+                
+                document.getElementById('cancelBtn').classList.add('hidden');
+            }
+
+            // 🔵 폼 제출 (POST:등록 / PUT:수정)
             document.getElementById('postForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const title = document.getElementById('title').value;
                 const content = document.getElementById('content').value;
 
                 try {
-                    const response = await fetch('/posts/', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title, content })
-                    });
-
-                    if (response.ok) {
+                    if (editingId) {
+                        // 수정 중일 때
+                        await fetch(`/posts/${editingId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title, content })
+                        });
+                        cancelEdit(); // 폼 초기화
+                    } else {
+                        // 새 글일 때
+                        await fetch('/posts/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title, content })
+                        });
                         document.getElementById('title').value = '';
                         document.getElementById('content').value = '';
-                        loadPosts(); // 등록 후 목록 새로고침
                     }
+                    loadPosts(); // 목록 새로고침
                 } catch (error) {
                     console.error('Error:', error);
                 }
             });
 
-            // 페이지 로드 시 자동으로 글 목록 불러오기
             window.onload = loadPosts;
         </script>
     </body>
@@ -143,7 +229,7 @@ def read_root():
     """
     return html_content
 
-# API 2: 게시글 작성하기 (POST)
+# API 2: 리스트 불러오기 (GET)
 @app.get("/posts/")
 def read_posts():
     db = SessionLocal()
@@ -151,7 +237,7 @@ def read_posts():
     db.close()
     return posts
 
-# API 3: 게시글 목록 보기 (GET)
+# API 3: 게시글 등록 (POST)
 @app.post("/posts/")
 def create_post(post: PostCreate):
     db = SessionLocal()
@@ -160,4 +246,27 @@ def create_post(post: PostCreate):
     db.commit()
     db.refresh(db_post)
     db.close()
-    return {"message": "Success", "post": db_post}
+    return {"message": "Success"}
+
+# 🚀 API 4: 게시글 수정 (PUT) 추가
+@app.put("/posts/{post_id}")
+def update_post(post_id: int, post: PostCreate):
+    db = SessionLocal()
+    db_post = db.query(Post).filter(Post.id == post_id).first()
+    if db_post:
+        db_post.title = post.title
+        db_post.content = post.content
+        db.commit()
+    db.close()
+    return {"message": "Updated"}
+
+# 🚀 API 5: 게시글 삭제 (DELETE) 추가
+@app.delete("/posts/{post_id}")
+def delete_post(post_id: int):
+    db = SessionLocal()
+    db_post = db.query(Post).filter(Post.id == post_id).first()
+    if db_post:
+        db.delete(db_post)
+        db.commit()
+    db.close()
+    return {"message": "Deleted"}
