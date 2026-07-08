@@ -3,3 +3,6 @@ uvicorn
 sqlalchemy
 pymysql
 cryptography
+pydantic
+bcrypt
+pyjwt   
