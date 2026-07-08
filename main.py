@@ -24,6 +24,7 @@ Base = declarative_base()
 SECRET_KEY = "aws_cloud_architecture_super_secret_key"
 ALGORITHM = "HS256"
 
+
 # 2. 데이터베이스 테이블 정의
 class Post(Base):
     __tablename__ = "posts"
@@ -31,9 +32,7 @@ class Post(Base):
     title = Column(String(50), index=True)
     content = Column(String(255))
     author = Column(String(50), default="익명")
-    post_password = Column(
-        String(255), nullable=True
-    )  # 익명 글 비밀번호 저장용 컬럼
+    post_password = Column(String(255), nullable=True)
 
 
 class User(Base):
@@ -45,7 +44,6 @@ class User(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# 🚀 [버그 완벽 수정!] 컬럼 추가를 각각 따로따로 시도해서 하나가 실패해도 다음 게 무조건 실행되도록 분리!
 with engine.connect() as conn:
     try:
         conn.execute(
@@ -55,8 +53,7 @@ with engine.connect() as conn:
         )
         conn.commit()
     except Exception:
-        pass  # 이미 author 컬럼이 있으면 패스!
-
+        pass
     try:
         conn.execute(
             text(
@@ -65,16 +62,17 @@ with engine.connect() as conn:
         )
         conn.commit()
     except Exception:
-        pass  # 이미 post_password 컬럼이 있으면 패스!
+        pass
 
 app = FastAPI()
+
 
 # 3. 데이터 검증 모델
 class PostCreate(BaseModel):
     title: str
     content: str
     author: str = "익명"
-    post_password: Optional[str] = None  # 기본값을 None으로 안전하게 변경
+    post_password: Optional[str] = None
 
 
 class PostAction(BaseModel):
@@ -88,11 +86,13 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
+
 # 4. 보안 헬퍼 함수
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
         "utf-8"
     )
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password or not plain_password:
@@ -101,6 +101,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         plain_password.encode("utf-8"), hashed_password.encode("utf-8")
     )
 
+
 def create_jwt_token(username: str):
     payload = {
         "sub": username,
@@ -108,8 +109,9 @@ def create_jwt_token(username: str):
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
+
 # ==========================================
-# 🌟 프론트엔드 UI
+# 🌟 프론트엔드 UI (hy0sk 웹페이지 & 비번 필수 검사)
 # ==========================================
 @app.get("/", response_class=HTMLResponse)
 def read_root():
@@ -119,13 +121,13 @@ def read_root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AWS 클라우드 갤러리</title>
+        <title>hy0sk 웹페이지</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
     <body class="bg-slate-100 font-sans min-h-screen pb-12">
         <header class="bg-blue-700 text-white shadow-md py-4 mb-6">
             <div class="max-w-4xl mx-auto px-4 flex justify-between items-center">
-                <a href="#" class="text-xl font-bold tracking-tight">☁️ Cloud Architecture Board</a>
+                <a href="#" class="text-xl font-bold tracking-tight">☁️ hy0sk 웹페이지</a>
                 <div id="authSection" class="flex items-center gap-3 text-sm"></div>
             </div>
         </header>
@@ -137,22 +139,27 @@ def read_root():
                     <button id="btnShowWrite" onclick="window.location.hash='#write'" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition">✏️ 글쓰기</button>
                 </div>
 
-                <!-- 1. 리스트 뷰 -->
                 <div id="listView" class="block">
                     <table class="w-full text-sm text-left text-slate-600">
                         <thead class="text-xs text-slate-500 bg-slate-100 border-b border-slate-200">
-                            <tr><th class="px-4 py-2.5 w-16 text-center font-semibold">번호</th><th class="px-4 py-2.5 font-semibold">제목</th><th class="px-4 py-2.5 w-28 text-center font-semibold">작성자</th></tr>
+                            <tr>
+                                <th class="px-4 py-2.5 w-16 text-center font-semibold">번호</th>
+                                <th class="px-4 py-2.5 font-semibold">제목</th>
+                                <th class="px-4 py-2.5 w-28 text-center font-semibold">작성자</th>
+                            </tr>
                         </thead>
                         <tbody id="postsList" class="divide-y divide-slate-200"></tbody>
                     </table>
                 </div>
 
-                <!-- 2. 읽기 뷰 -->
                 <div id="readView" class="hidden p-6">
                     <div class="border-b border-slate-200 pb-4 mb-4">
                         <h2 id="readTitle" class="text-xl font-bold text-slate-800 mb-2"></h2>
                         <div class="flex justify-between items-center text-xs text-slate-500">
-                            <div><span id="readId" class="mr-3"></span><span id="readAuthor" class="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"></span></div>
+                            <div>
+                                <span id="readId" class="mr-3"></span>
+                                <span id="readAuthor" class="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"></span>
+                            </div>
                             <div class="relative">
                                 <button onclick="toggleMenu()" class="text-slate-400 hover:text-slate-700 px-2 text-base">⋮</button>
                                 <div id="readMenu" class="hidden absolute right-0 mt-1 w-24 bg-white border border-slate-200 shadow-lg rounded z-10">
@@ -168,14 +175,14 @@ def read_root():
                     </div>
                 </div>
 
-                <!-- 3. 쓰기/수정 뷰 -->
                 <div id="writeView" class="hidden p-6 bg-slate-50">
                     <form id="postForm" class="space-y-4">
                         <div class="flex justify-between items-center text-xs text-slate-500 mb-1">
                             <span>✍️ 작성자: <strong id="currentAuthorDisplay" class="text-blue-600">익명</strong></span>
+                            <!-- 🚀 기본값 1234 완전 삭제! 필수 입력 안내로 변경 -->
                             <div id="postPwContainer" class="flex items-center gap-2">
                                 <label class="text-slate-600 font-bold">🔑 게시글 비번:</label>
-                                <input type="password" id="postPw" class="px-2 py-1 border border-slate-300 rounded text-xs w-24 focus:outline-none focus:border-blue-500" placeholder="비밀번호(4자리)" value="1234">
+                                <input type="password" id="postPw" class="px-2 py-1 border border-slate-300 rounded text-xs w-32 focus:outline-none focus:border-blue-500" placeholder="비밀번호(필수)">
                             </div>
                         </div>
                         <input type="text" id="title" required class="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-sm" placeholder="제목을 입력하세요">
@@ -189,7 +196,6 @@ def read_root():
             </div>
         </main>
 
-        <!-- 로그인/회원가입 모달 -->
         <div id="authModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
             <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 relative animate-fade-in">
                 <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">✕</button>
@@ -212,7 +218,8 @@ def read_root():
                 const pwContainer = document.getElementById('postPwContainer');
                 
                 if (username) {
-                    authSection.innerHTML = `<span class="bg-blue-800 text-blue-100 px-2.5 py-1 rounded text-xs font-semibold">👑 ${username}님</span><button onclick="logout()" class="text-blue-200 hover:text-white text-xs underline">로그아웃</button>`;
+                    const badge = (username === 'hy0sk') ? '👑 관리자 hy0sk님' : `👑 ${username}님`;
+                    authSection.innerHTML = `<span class="bg-blue-800 text-blue-100 px-2.5 py-1 rounded text-xs font-semibold">${badge}</span><button onclick="logout()" class="text-blue-200 hover:text-white text-xs underline">로그아웃</button>`;
                     if(authorDisplay) authorDisplay.innerText = username;
                     if(pwContainer) pwContainer.classList.add('hidden');
                 } else {
@@ -259,6 +266,7 @@ def read_root():
                 const hash = window.location.hash;
                 if (hash === '#write') {
                     currentEditId = null; document.getElementById('title').value = ''; document.getElementById('content').value = '';
+                    if(document.getElementById('postPw')) document.getElementById('postPw').value = '';
                     document.getElementById('submitBtn').innerText = '등록';
                     document.getElementById('listView').classList.add('hidden'); document.getElementById('readView').classList.add('hidden');
                     document.getElementById('btnShowWrite').classList.add('hidden'); document.getElementById('writeView').classList.remove('hidden');
@@ -293,12 +301,15 @@ def read_root():
                 const currentUsername = localStorage.getItem('username');
                 let postPassword = null;
 
-                if (post.author === '익명' || post.author !== currentUsername) {
-                    postPassword = prompt("🚨 익명 글(또는 타인 글)을 삭제하려면 게시글 비밀번호를 입력하세요:", "");
-                    if (postPassword === null) return; 
-                } else {
-                    if (!confirm("정말 이 게시글을 삭제하시겠습니까?")) return;
+                // 👑 hy0sk 관리자는 비번 없이 프리패스!
+                if (currentUsername !== 'hy0sk') {
+                    if (post.author === '익명' || post.author !== currentUsername) {
+                        postPassword = prompt("🚨 익명 글(또는 타인 글)을 삭제하려면 게시글 비밀번호를 입력하세요:", "");
+                        if (postPassword === null) return; 
+                    }
                 }
+
+                if (!confirm("정말 이 게시글을 삭제하시겠습니까?")) return;
 
                 try {
                     const res = await fetch(`/posts/${currentEditId}`, {
@@ -315,26 +326,51 @@ def read_root():
 
             document.getElementById('postForm').addEventListener('submit', async (e) => {
                 e.preventDefault(); 
-                const title = document.getElementById('title').value; const content = document.getElementById('content').value;
+                const title = document.getElementById('title').value; 
+                const content = document.getElementById('content').value;
                 const author = localStorage.getItem('username') || '익명';
-                // 로그인 상태면 post_password는 전송하지 않음!
-                const post_password = (author === '익명' && document.getElementById('postPw')) ? document.getElementById('postPw').value : null;
+                
+                let rawPw = (author === '익명' && document.getElementById('postPw')) ? document.getElementById('postPw').value : null;
+                const post_password = (rawPw && rawPw.trim() !== "") ? rawPw.trim() : null;
+
+                // 🚀 [핵심 수정!] 익명으로 글 작성/수정할 때 비밀번호를 비워두면 경고 띄우고 차단!
+                if (author === '익명' && !post_password && !currentEditId) {
+                    alert("⚠️ 익명 게시글 작성 시 비밀번호를 꼭 입력해야 합니다!");
+                    document.getElementById('postPw').focus();
+                    return;
+                }
 
                 try {
                     if (currentEditId) {
                         const post = currentPosts.find(p => p.id === currentEditId);
                         let editPw = post_password;
-                        if (post.author === '익명' || post.author !== author) {
-                            editPw = prompt("🚨 게시글 수정 비밀번호를 입력하세요:", "");
-                            if (editPw === null) return;
+                        
+                        if (author !== 'hy0sk') {
+                            if (post.author === '익명' || post.author !== author) {
+                                editPw = prompt("🚨 게시글 수정 비밀번호를 입력하세요:", "");
+                                if (editPw === null) return;
+                                if (!editPw || editPw.trim() === "") {
+                                    alert("⚠️ 비밀번호를 입력해야 수정할 수 있습니다!");
+                                    return;
+                                }
+                            }
                         }
                         const res = await fetch(`/posts/${currentEditId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, post_password: editPw, username: author }) });
                         if (!res.ok) { const d = await res.json(); alert("⛔ " + (d.detail || "수정 권한이 없습니다!")); return; }
                     } else { 
-                        await fetch('/posts/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, author, post_password }) }); 
+                        const res = await fetch('/posts/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, author, post_password }) }); 
+                        if (!res.ok) { 
+                            const d = await res.json();
+                            alert("⛔ " + (d.detail || "게시글 등록에 실패했습니다.")); 
+                            return; 
+                        }
                     }
-                    await loadPosts(); window.location.hash = '';
-                } catch (e) { console.error('Error:', e); }
+                    await loadPosts(); 
+                    window.location.hash = '';
+                } catch (e) { 
+                    console.error('Error:', e); 
+                    alert("서버와 통신 중 오류가 발생했습니다.");
+                }
             });
 
             window.onload = async () => { updateAuthUI(); await loadPosts(); router(); };
@@ -344,8 +380,9 @@ def read_root():
     """
     return html_content
 
+
 # ==========================================
-# 🌟 백엔드 API
+# 🌟 백엔드 API (👑 hy0sk 관리자 & 비번 필수 검증)
 # ==========================================
 @app.get("/posts/")
 def read_posts():
@@ -354,9 +391,18 @@ def read_posts():
     db.close()
     return posts
 
+
 @app.post("/posts/")
 def create_post(post: PostCreate):
     db = SessionLocal()
+    # 🚀 백엔드에서도 익명 글인데 비밀번호가 없으면 에러 뱉고 거절!
+    if post.author == "익명" and not post.post_password:
+        db.close()
+        raise HTTPException(
+            status_code=400,
+            detail="익명 게시글 작성 시 비밀번호를 꼭 입력해야 합니다!",
+        )
+
     hashed_pw = (
         hash_password(post.post_password)
         if (post.post_password and post.author == "익명")
@@ -374,6 +420,7 @@ def create_post(post: PostCreate):
     db.close()
     return {"message": "Success"}
 
+
 @app.put("/posts/{post_id}")
 def update_post(post_id: int, action: PostAction):
     db = SessionLocal()
@@ -382,20 +429,24 @@ def update_post(post_id: int, action: PostAction):
         db.close()
         raise HTTPException(status_code=404, detail="게시글이 없습니다.")
 
-    if db_post.author != "익명":
-        if db_post.author != action.username:
-            db.close()
-            raise HTTPException(
-                status_code=403, detail="다른 사람의 글은 수정할 수 없습니다!"
-            )
-    else:
-        if not action.post_password or not verify_password(
-            action.post_password, db_post.post_password
-        ):
-            db.close()
-            raise HTTPException(
-                status_code=403, detail="게시글 비밀번호가 틀렸습니다!"
-            )
+    is_admin = action.username == "hy0sk"
+
+    if not is_admin:
+        if db_post.author != "익명":
+            if db_post.author != action.username:
+                db.close()
+                raise HTTPException(
+                    status_code=403,
+                    detail="다른 사람의 글은 수정할 수 없습니다!",
+                )
+        else:
+            if not action.post_password or not verify_password(
+                action.post_password, db_post.post_password
+            ):
+                db.close()
+                raise HTTPException(
+                    status_code=403, detail="게시글 비밀번호가 틀렸습니다!"
+                )
 
     if action.title:
         db_post.title = action.title
@@ -405,6 +456,7 @@ def update_post(post_id: int, action: PostAction):
     db.close()
     return {"message": "Updated"}
 
+
 @app.delete("/posts/{post_id}")
 def delete_post(post_id: int, action: PostAction):
     db = SessionLocal()
@@ -413,28 +465,31 @@ def delete_post(post_id: int, action: PostAction):
         db.close()
         raise HTTPException(status_code=404, detail="게시글이 없습니다.")
 
-    if db_post.author != "익명":
-        if db_post.author != action.username:
-            db.close()
-            raise HTTPException(
-                status_code=403,
-                detail="회원이 작성한 글은 본인만 삭제할 수 있습니다!",
-            )
-    else:
-        # 이전에 작성된 글이라 비번이 없는 경우 통과, 비번이 있으면 검증!
-        if db_post.post_password and (
-            not action.post_password
-            or not verify_password(action.post_password, db_post.post_password)
-        ):
-            db.close()
-            raise HTTPException(
-                status_code=403, detail="게시글 비밀번호가 일치하지 않습니다!"
-            )
+    is_admin = action.username == "hy0sk"
+
+    if not is_admin:
+        if db_post.author != "익명":
+            if db_post.author != action.username:
+                db.close()
+                raise HTTPException(
+                    status_code=403,
+                    detail="회원이 작성한 글은 본인만 삭제할 수 있습니다!",
+                )
+        else:
+            if not action.post_password or not verify_password(
+                action.post_password, db_post.post_password
+            ):
+                db.close()
+                raise HTTPException(
+                    status_code=403,
+                    detail="게시글 비밀번호가 일치하지 않습니다!",
+                )
 
     db.delete(db_post)
     db.commit()
     db.close()
     return {"message": "Deleted"}
+
 
 @app.post("/signup")
 def signup(user: UserCreate):
@@ -454,6 +509,7 @@ def signup(user: UserCreate):
     db.refresh(db_user)
     db.close()
     return {"message": "회원가입 성공!", "username": db_user.username}
+
 
 @app.post("/login")
 def login(user: UserCreate):
