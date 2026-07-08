@@ -31,7 +31,10 @@ class Post(Base):
     title = Column(String(50), index=True)
     content = Column(String(255))
     author = Column(String(50), default="익명")
-    post_password = Column(String(255), nullable=True)  # 🚀 익명 글 비밀번호 저장용 컬럼!
+    post_password = Column(
+        String(255), nullable=True
+    )  # 익명 글 비밀번호 저장용 컬럼
+
 
 class User(Base):
     __tablename__ = "users"
@@ -39,16 +42,30 @@ class User(Base):
     username = Column(String(50), unique=True, index=True)
     password = Column(String(255))
 
+
 Base.metadata.create_all(bind=engine)
 
-# DB 테이블에 post_password 컬럼 자동 추가 안전장치
-try:
-    with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE posts ADD COLUMN author VARCHAR(50) DEFAULT '익명';"))
-        conn.execute(text("ALTER TABLE posts ADD COLUMN post_password VARCHAR(255) NULL;"))
+# 🚀 [버그 완벽 수정!] 컬럼 추가를 각각 따로따로 시도해서 하나가 실패해도 다음 게 무조건 실행되도록 분리!
+with engine.connect() as conn:
+    try:
+        conn.execute(
+            text(
+                "ALTER TABLE posts ADD COLUMN author VARCHAR(50) DEFAULT '익명';"
+            )
+        )
         conn.commit()
-except Exception:
-    pass
+    except Exception:
+        pass  # 이미 author 컬럼이 있으면 패스!
+
+    try:
+        conn.execute(
+            text(
+                "ALTER TABLE posts ADD COLUMN post_password VARCHAR(255) NULL;"
+            )
+        )
+        conn.commit()
+    except Exception:
+        pass  # 이미 post_password 컬럼이 있으면 패스!
 
 app = FastAPI()
 
@@ -57,7 +74,8 @@ class PostCreate(BaseModel):
     title: str
     content: str
     author: str = "익명"
-    post_password: Optional[str] = "1234"  # 기본 비밀번호
+    post_password: Optional[str] = None  # 기본값을 None으로 안전하게 변경
+
 
 class PostAction(BaseModel):
     title: Optional[str] = None
@@ -65,24 +83,33 @@ class PostAction(BaseModel):
     post_password: Optional[str] = None
     username: Optional[str] = None
 
+
 class UserCreate(BaseModel):
     username: str
     password: str
 
 # 4. 보안 헬퍼 함수
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    if not hashed_password: return False
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    if not hashed_password or not plain_password:
+        return False
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )
 
 def create_jwt_token(username: str):
-    payload = {"sub": username, "exp": datetime.utcnow() + timedelta(hours=24)}
+    payload = {
+        "sub": username,
+        "exp": datetime.utcnow() + timedelta(hours=24),
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 # ==========================================
-# 🌟 프론트엔드 UI (디시 스타일 비밀번호 UI 적용) 🌟
+# 🌟 프론트엔드 UI
 # ==========================================
 @app.get("/", response_class=HTMLResponse)
 def read_root():
@@ -146,7 +173,6 @@ def read_root():
                     <form id="postForm" class="space-y-4">
                         <div class="flex justify-between items-center text-xs text-slate-500 mb-1">
                             <span>✍️ 작성자: <strong id="currentAuthorDisplay" class="text-blue-600">익명</strong></span>
-                            <!-- 🚀 익명일 때만 나타나는 비밀번호 입력란! -->
                             <div id="postPwContainer" class="flex items-center gap-2">
                                 <label class="text-slate-600 font-bold">🔑 게시글 비번:</label>
                                 <input type="password" id="postPw" class="px-2 py-1 border border-slate-300 rounded text-xs w-24 focus:outline-none focus:border-blue-500" placeholder="비밀번호(4자리)" value="1234">
@@ -188,11 +214,11 @@ def read_root():
                 if (username) {
                     authSection.innerHTML = `<span class="bg-blue-800 text-blue-100 px-2.5 py-1 rounded text-xs font-semibold">👑 ${username}님</span><button onclick="logout()" class="text-blue-200 hover:text-white text-xs underline">로그아웃</button>`;
                     if(authorDisplay) authorDisplay.innerText = username;
-                    if(pwContainer) pwContainer.classList.add('hidden'); // 로그인하면 글 비번 입력창 숨김
+                    if(pwContainer) pwContainer.classList.add('hidden');
                 } else {
                     authSection.innerHTML = `<button onclick="openModal('login')" class="bg-blue-800 hover:bg-blue-900 px-3 py-1.5 rounded transition text-xs font-medium">🔑 로그인</button><button onclick="openModal('signup')" class="bg-white text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded transition text-xs font-bold">✨ 회원가입</button>`;
                     if(authorDisplay) authorDisplay.innerText = '익명';
-                    if(pwContainer) pwContainer.classList.remove('hidden'); // 익명일 땐 글 비번 창 표시!
+                    if(pwContainer) pwContainer.classList.remove('hidden');
                 }
             }
 
@@ -262,16 +288,14 @@ def read_root():
             window.addEventListener('hashchange', router);
             function toggleMenu() { document.getElementById('readMenu').classList.toggle('hidden'); }
             
-            // 🚀 [디시인사이드 스타일] 게시글 삭제 권한 검사 기능!
             async function deletePost() {
                 const post = currentPosts.find(p => p.id === currentEditId);
                 const currentUsername = localStorage.getItem('username');
                 let postPassword = null;
 
-                // 1. 익명 글이거나, 남이 쓴 글이면 비밀번호 물어보기!
                 if (post.author === '익명' || post.author !== currentUsername) {
                     postPassword = prompt("🚨 익명 글(또는 타인 글)을 삭제하려면 게시글 비밀번호를 입력하세요:", "");
-                    if (postPassword === null) return; // 취소 누름
+                    if (postPassword === null) return; 
                 } else {
                     if (!confirm("정말 이 게시글을 삭제하시겠습니까?")) return;
                 }
@@ -289,16 +313,15 @@ def read_root():
                 } catch (e) { console.error('Error:', e); }
             }
 
-            // 🚀 게시글 등록 & 수정 (비밀번호 함께 전송)
             document.getElementById('postForm').addEventListener('submit', async (e) => {
                 e.preventDefault(); 
                 const title = document.getElementById('title').value; const content = document.getElementById('content').value;
                 const author = localStorage.getItem('username') || '익명';
-                const post_password = document.getElementById('postPw') ? document.getElementById('postPw').value : null;
+                // 로그인 상태면 post_password는 전송하지 않음!
+                const post_password = (author === '익명' && document.getElementById('postPw')) ? document.getElementById('postPw').value : null;
 
                 try {
                     if (currentEditId) {
-                        // 수정 권한 검사
                         const post = currentPosts.find(p => p.id === currentEditId);
                         let editPw = post_password;
                         if (post.author === '익명' || post.author !== author) {
@@ -322,7 +345,7 @@ def read_root():
     return html_content
 
 # ==========================================
-# 🌟 백엔드 API (🚀 디시 스타일 권한 방패 추가!) 🌟
+# 🌟 백엔드 API
 # ==========================================
 @app.get("/posts/")
 def read_posts():
@@ -334,8 +357,17 @@ def read_posts():
 @app.post("/posts/")
 def create_post(post: PostCreate):
     db = SessionLocal()
-    hashed_pw = hash_password(post.post_password) if post.post_password else None
-    db_post = Post(title=post.title, content=post.content, author=post.author, post_password=hashed_pw)
+    hashed_pw = (
+        hash_password(post.post_password)
+        if (post.post_password and post.author == "익명")
+        else None
+    )
+    db_post = Post(
+        title=post.title,
+        content=post.content,
+        author=post.author,
+        post_password=hashed_pw,
+    )
     db.add(db_post)
     db.commit()
     db.refresh(db_post)
@@ -349,20 +381,26 @@ def update_post(post_id: int, action: PostAction):
     if not db_post:
         db.close()
         raise HTTPException(status_code=404, detail="게시글이 없습니다.")
-    
-    # 🛡️ 권한 검사 1: 회원 글이면 본인 아이디 일치 여부 확인
+
     if db_post.author != "익명":
         if db_post.author != action.username:
             db.close()
-            raise HTTPException(status_code=403, detail="다른 사람의 글은 수정할 수 없습니다!")
-    # 🛡️ 권한 검사 2: 익명 글이면 비밀번호 해시 일치 여부 확인
+            raise HTTPException(
+                status_code=403, detail="다른 사람의 글은 수정할 수 없습니다!"
+            )
     else:
-        if not action.post_password or not verify_password(action.post_password, db_post.post_password):
+        if not action.post_password or not verify_password(
+            action.post_password, db_post.post_password
+        ):
             db.close()
-            raise HTTPException(status_code=403, detail="게시글 비밀번호가 틀렸습니다!")
+            raise HTTPException(
+                status_code=403, detail="게시글 비밀번호가 틀렸습니다!"
+            )
 
-    if action.title: db_post.title = action.title
-    if action.content: db_post.content = action.content
+    if action.title:
+        db_post.title = action.title
+    if action.content:
+        db_post.content = action.content
     db.commit()
     db.close()
     return {"message": "Updated"}
@@ -374,16 +412,24 @@ def delete_post(post_id: int, action: PostAction):
     if not db_post:
         db.close()
         raise HTTPException(status_code=404, detail="게시글이 없습니다.")
-    
-    # 🛡️ 삭제 권한 철통 검사!
+
     if db_post.author != "익명":
         if db_post.author != action.username:
             db.close()
-            raise HTTPException(status_code=403, detail="회원이 작성한 글은 본인만 삭제할 수 있습니다!")
+            raise HTTPException(
+                status_code=403,
+                detail="회원이 작성한 글은 본인만 삭제할 수 있습니다!",
+            )
     else:
-        if not action.post_password or not verify_password(action.post_password, db_post.post_password):
+        # 이전에 작성된 글이라 비번이 없는 경우 통과, 비번이 있으면 검증!
+        if db_post.post_password and (
+            not action.post_password
+            or not verify_password(action.post_password, db_post.post_password)
+        ):
             db.close()
-            raise HTTPException(status_code=403, detail="게시글 비밀번호가 일치하지 않습니다!")
+            raise HTTPException(
+                status_code=403, detail="게시글 비밀번호가 일치하지 않습니다!"
+            )
 
     db.delete(db_post)
     db.commit()
@@ -393,10 +439,14 @@ def delete_post(post_id: int, action: PostAction):
 @app.post("/signup")
 def signup(user: UserCreate):
     db = SessionLocal()
-    existing_user = db.query(User).filter(User.username == user.username).first()
+    existing_user = (
+        db.query(User).filter(User.username == user.username).first()
+    )
     if existing_user:
         db.close()
-        raise HTTPException(status_code=400, detail="이미 존재하는 아이디입니다.")
+        raise HTTPException(
+            status_code=400, detail="이미 존재하는 아이디입니다."
+        )
     hashed_pw = hash_password(user.password)
     db_user = User(username=user.username, password=hashed_pw)
     db.add(db_user)
@@ -411,6 +461,12 @@ def login(user: UserCreate):
     db_user = db.query(User).filter(User.username == user.username).first()
     db.close()
     if not db_user or not verify_password(user.password, db_user.password):
-        raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 일치하지 않습니다.")
+        raise HTTPException(
+            status_code=401, detail="아이디 또는 비밀번호가 일치하지 않습니다."
+        )
     token = create_jwt_token(db_user.username)
-    return {"message": "로그인 성공!", "token": token, "username": db_user.username}
+    return {
+        "message": "로그인 성공!",
+        "token": token,
+        "username": db_user.username,
+    }
