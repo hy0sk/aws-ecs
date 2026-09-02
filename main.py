@@ -44,6 +44,22 @@ class User(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# 테이블 생성 직후에 아래 코드를 추가해 주세요!
+Base.metadata.create_all(bind=engine)
+
+# 🚀 서버가 켜질 때 hy0sk 관리자 계정이 없으면 자동 생성하는 코드
+with SessionLocal() as init_db:
+    admin_user = (
+        init_db.query(User).filter(User.username == "hy0sk").first()
+    )
+    if not admin_user:
+        hashed_admin_pw = 1234(
+            "원하시는관리자비디오비밀번호"
+        )  # 사용할 비밀번호 입력!
+        db_admin = User(username="hy0sk", password=hashed_admin_pw)
+        init_db.add(db_admin)
+        init_db.commit()
+
 with engine.connect() as conn:
     try:
         conn.execute(
