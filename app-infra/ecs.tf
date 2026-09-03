@@ -4,6 +4,11 @@ resource "aws_ecs_cluster" "my_cluster" {
   name = "my-test-cluster"
 }
 
+resource "aws_cloudwatch_log_group" "ecs_log_group" {
+  name              = "/ecs/my-test-web-task"
+  retention_in_days = 7
+}
+
 resource "aws_ecs_task_definition" "my_task" {
   family                   = "my-test-web-task"
   requires_compatibilities = ["FARGATE"]
@@ -32,7 +37,15 @@ resource "aws_ecs_task_definition" "my_task" {
         { name = "DB_USER", value = var.db_username },
         { name = "DB_PASS", value = var.db_password },
         { name = "DB_NAME", value = aws_db_instance.my_db.db_name }
-      ]
+      ],
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs_log_group.name
+          "awslogs-region"        = "ap-northeast-2"
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
     }
   ])
 }
