@@ -44,6 +44,12 @@ class User(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# 4. 보안 헬퍼 함수
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
+
 # 테이블 생성 직후에 아래 코드를 추가해 주세요!
 Base.metadata.create_all(bind=engine)
 
@@ -53,8 +59,8 @@ with SessionLocal() as init_db:
         init_db.query(User).filter(User.username == "hy0sk").first()
     )
     if not admin_user:
-        hashed_admin_pw = 1234(
-            "원하시는관리자비디오비밀번호"
+        hashed_admin_pw = hash_password(
+            "qlalfqjsgh0!"
         )  # 사용할 비밀번호 입력!
         db_admin = User(username="hy0sk", password=hashed_admin_pw)
         init_db.add(db_admin)
@@ -102,12 +108,6 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
-
-# 4. 보안 헬퍼 함수
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
-        "utf-8"
-    )
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
