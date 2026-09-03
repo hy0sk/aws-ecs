@@ -1,0 +1,18 @@
+# backend.tf.example
+#
+# 로컬 상태파일(terraform.tfstate)은 노트북이 바뀌거나 파일이 실수로 삭제되면
+# base-infra 전체를 다시 만들어야 하는 위험이 있습니다(=네임서버가 또 바뀝니다).
+# 아래 내용을 backend.tf 로 저장하고 버킷/테이블 이름을 채운 뒤
+# `terraform init -migrate-state` 를 실행하면 상태를 S3로 안전하게 옮길 수 있습니다.
+#
+# app-infra/main.tf 의 terraform_remote_state 블록도 backend = "s3" 로 함께 바꿔주세요.
+
+# terraform {
+#   backend "s3" {
+#     bucket         = "hy0sk-terraform-state"      # 미리 생성해둔 S3 버킷
+#     key            = "base-infra/terraform.tfstate"
+#     region         = "ap-northeast-2"
+#     dynamodb_table = "terraform-lock"              # 동시 apply 방지용 락 테이블(선택)
+#     encrypt        = true
+#   }
+# }
