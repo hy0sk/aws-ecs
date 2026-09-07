@@ -16,7 +16,7 @@ resource "aws_ecs_task_definition" "my_task" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
-
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
   container_definitions = jsonencode([
     {
       name      = "my-web-container"
@@ -32,11 +32,13 @@ resource "aws_ecs_task_definition" "my_task" {
         }
       ],
       # RDS가 이제 같은 app-infra 폴더 안에 있으므로 remote_state 대신 직접 참조합니다.
-      environment = [
+            environment = [
         { name = "DB_HOST", value = replace(aws_db_instance.my_db.endpoint, ":3306", "") },
         { name = "DB_USER", value = var.db_username },
         { name = "DB_PASS", value = var.db_password },
-        { name = "DB_NAME", value = aws_db_instance.my_db.db_name }
+        { name = "DB_NAME", value = aws_db_instance.my_db.db_name },
+        { name = "UPLOAD_BUCKET", value = aws_s3_bucket.board_uploads.id },
+        { name = "CDN_DOMAIN", value = aws_cloudfront_distribution.board_uploads.domain_name }
       ],
       logConfiguration = {
         logDriver = "awslogs"

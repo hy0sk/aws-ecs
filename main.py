@@ -6,6 +6,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 import os
 import bcrypt
 import jwt
+import boto3
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -14,6 +16,12 @@ DB_USER = os.getenv("DB_USER", "admin")
 DB_PASS = os.getenv("DB_PASS", "password1234!")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "community_db")
+
+# S3 업로드 관련 설정
+UPLOAD_BUCKET = os.getenv("UPLOAD_BUCKET")
+CDN_DOMAIN = os.getenv("CDN_DOMAIN")
+s3_client = boto3.client("s3", region_name="ap-northeast-2")
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:3306/{DB_NAME}"
 
@@ -33,6 +41,7 @@ class Post(Base):
     content = Column(String(255))
     author = Column(String(50), default="익명")
     post_password = Column(String(255), nullable=True)
+    image_url = Column(String(500), nullable=True)
 
 
 class User(Base):
@@ -44,14 +53,15 @@ class User(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# 4. 보안 헬퍼 함수
+# 테이블 생성 직후에 아래 코드를 추가해 주세요!
+Base.metadata.create_all(bind=engine)
+
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
         "utf-8"
     )
 
-# 테이블 생성 직후에 아래 코드를 추가해 주세요!
-Base.metadata.create_all(bind=engine)
 
 # 🚀 서버가 켜질 때 hy0sk 관리자 계정이 없으면 자동 생성하는 코드
 with SessionLocal() as init_db:
@@ -60,7 +70,7 @@ with SessionLocal() as init_db:
     )
     if not admin_user:
         hashed_admin_pw = hash_password(
-            "qlalfqjsgh0!"
+            "원하시는관리자비디오비밀번호"
         )  # 사용할 비밀번호 입력!
         db_admin = User(username="hy0sk", password=hashed_admin_pw)
         init_db.add(db_admin)
@@ -85,6 +95,15 @@ with engine.connect() as conn:
         conn.commit()
     except Exception:
         pass
+    try:
+        conn.execute(
+            text(
+                "ALTER TABLE posts ADD COLUMN image_url VARCHAR(500) NULL;"
+            )
+        )
+        conn.commit()
+    except Exception:
+        pass
 
 app = FastAPI()
 
@@ -95,6 +114,7 @@ class PostCreate(BaseModel):
     content: str
     author: str = "익명"
     post_password: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class PostAction(BaseModel):
@@ -102,6 +122,7 @@ class PostAction(BaseModel):
     content: Optional[str] = None
     post_password: Optional[str] = None
     username: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class UserCreate(BaseModel):
@@ -109,7 +130,7 @@ class UserCreate(BaseModel):
     password: str
 
 
-
+# 4. 보안 헬퍼 함수
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password or not plain_password:
         return False
@@ -185,6 +206,7 @@ def read_root():
                             </div>
                         </div>
                     </div>
+                    <img id="readImage" class="hidden max-w-full rounded border border-slate-200 mb-4">
                     <div id="readContent" class="text-slate-700 whitespace-pre-line min-h-[150px] text-sm"></div>
                     <div class="mt-8 border-t border-slate-200 pt-4 text-right">
                         <button onclick="window.location.hash=''" class="bg-slate-500 hover:bg-slate-600 text-white px-4 py-1.5 rounded text-sm font-medium transition">목록으로</button>
@@ -203,6 +225,10 @@ def read_root():
                         </div>
                         <input type="text" id="title" required class="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-sm" placeholder="제목을 입력하세요">
                         <textarea id="content" rows="10" required class="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-sm resize-none" placeholder="내용을 입력하세요"></textarea>
+                        <div class="space-y-1">
+                            <input type="file" id="imageFile" accept="image/jpeg,image/png,image/gif,image/webp" class="w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-600 file:text-xs file:font-medium hover:file:bg-blue-100">
+                            <img id="imagePreview" class="hidden max-h-40 rounded border border-slate-200 mt-2">
+                        </div>
                         <div class="flex justify-end gap-2 pt-2">
                             <button type="button" onclick="window.location.hash=''" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-medium transition">취소</button>
                             <button type="submit" id="submitBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-medium transition">등록</button>
@@ -226,6 +252,53 @@ def read_root():
 
         <script>
             let currentPosts = []; let currentEditId = null; let authMode = 'login';
+            let uploadedImageUrl = null;
+
+            document.getElementById('imageFile').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+                if (file.size > MAX_SIZE) {
+                    alert("⚠️ 이미지 용량은 5MB 이하만 가능합니다.");
+                    e.target.value = '';
+                    return;
+                }
+
+                const preview = document.getElementById('imagePreview');
+                preview.src = URL.createObjectURL(file);
+                preview.classList.remove('hidden');
+
+                try {
+                    const res = await fetch(`/upload-url?filename=${encodeURIComponent(file.name)}`);
+                    if (!res.ok) {
+                        const d = await res.json();
+                        alert("⛔ " + (d.detail || "업로드 URL 발급에 실패했습니다."));
+                        e.target.value = '';
+                        preview.classList.add('hidden');
+                        return;
+                    }
+                    const { upload_url, image_url } = await res.json();
+
+                    const uploadRes = await fetch(upload_url, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': file.type },
+                        body: file,
+                    });
+
+                    if (!uploadRes.ok) {
+                        alert("⛔ 이미지 업로드에 실패했습니다.");
+                        e.target.value = '';
+                        preview.classList.add('hidden');
+                        return;
+                    }
+
+                    uploadedImageUrl = image_url;
+                } catch (err) {
+                    console.error('Upload error:', err);
+                    alert("서버와 통신 중 오류가 발생했습니다.");
+                }
+            });
 
             function updateAuthUI() {
                 const username = localStorage.getItem('username');
@@ -283,6 +356,9 @@ def read_root():
                 if (hash === '#write') {
                     currentEditId = null; document.getElementById('title').value = ''; document.getElementById('content').value = '';
                     if(document.getElementById('postPw')) document.getElementById('postPw').value = '';
+                    uploadedImageUrl = null;
+                    document.getElementById('imageFile').value = '';
+                    document.getElementById('imagePreview').classList.add('hidden');
                     document.getElementById('submitBtn').innerText = '등록';
                     document.getElementById('listView').classList.add('hidden'); document.getElementById('readView').classList.add('hidden');
                     document.getElementById('btnShowWrite').classList.add('hidden'); document.getElementById('writeView').classList.remove('hidden');
@@ -293,6 +369,13 @@ def read_root():
                     currentEditId = id; document.getElementById('readTitle').innerText = post.title;
                     document.getElementById('readId').innerText = `글번호: ${post.id}`; document.getElementById('readAuthor').innerText = `👤 작성자: ${post.author || '익명'}`;
                     document.getElementById('readContent').innerText = post.content;
+                    const readImg = document.getElementById('readImage');
+                    if (post.image_url) {
+                        readImg.src = post.image_url;
+                        readImg.classList.remove('hidden');
+                    } else {
+                        readImg.classList.add('hidden');
+                    }
                     document.getElementById('listView').classList.add('hidden'); document.getElementById('writeView').classList.add('hidden');
                     document.getElementById('btnShowWrite').classList.add('hidden'); document.getElementById('readView').classList.remove('hidden');
                     document.getElementById('boardTitle').innerText = '게시글 읽기'; document.getElementById('readMenu').classList.add('hidden');
@@ -300,6 +383,10 @@ def read_root():
                     const id = parseInt(hash.replace('#edit/', '')); const post = currentPosts.find(p => p.id === id);
                     if(!post) { window.location.hash = ''; return; }
                     currentEditId = id; document.getElementById('title').value = post.title; document.getElementById('content').value = post.content;
+                    uploadedImageUrl = post.image_url || null;
+                    const editPreview = document.getElementById('imagePreview');
+                    if (post.image_url) { editPreview.src = post.image_url; editPreview.classList.remove('hidden'); }
+                    else { editPreview.classList.add('hidden'); }
                     document.getElementById('submitBtn').innerText = '수정 완료';
                     document.getElementById('readView').classList.add('hidden'); document.getElementById('writeView').classList.remove('hidden');
                     document.getElementById('boardTitle').innerText = '글 수정하기'; updateAuthUI();
@@ -371,10 +458,10 @@ def read_root():
                                 }
                             }
                         }
-                        const res = await fetch(`/posts/${currentEditId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, post_password: editPw, username: author }) });
+                        const res = await fetch(`/posts/${currentEditId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, post_password: editPw, username: author, image_url: uploadedImageUrl }) });
                         if (!res.ok) { const d = await res.json(); alert("⛔ " + (d.detail || "수정 권한이 없습니다!")); return; }
                     } else { 
-                        const res = await fetch('/posts/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, author, post_password }) }); 
+                        const res = await fetch('/posts/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, author, post_password, image_url: uploadedImageUrl }) }); 
                         if (!res.ok) { 
                             const d = await res.json();
                             alert("⛔ " + (d.detail || "게시글 등록에 실패했습니다.")); 
@@ -429,6 +516,7 @@ def create_post(post: PostCreate):
         content=post.content,
         author=post.author,
         post_password=hashed_pw,
+        image_url=post.image_url,
     )
     db.add(db_post)
     db.commit()
@@ -468,6 +556,8 @@ def update_post(post_id: int, action: PostAction):
         db_post.title = action.title
     if action.content:
         db_post.content = action.content
+    if action.image_url is not None:
+        db_post.image_url = action.image_url
     db.commit()
     db.close()
     return {"message": "Updated"}
@@ -541,4 +631,31 @@ def login(user: UserCreate):
         "message": "로그인 성공!",
         "token": token,
         "username": db_user.username,
+    }
+
+
+@app.get("/upload-url")
+def get_upload_url(filename: str):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="이미지 파일(jpg, jpeg, png, gif, webp)만 업로드할 수 있습니다.",
+        )
+
+    key = f"posts/{uuid.uuid4()}.{ext}"
+
+    upload_url = s3_client.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": UPLOAD_BUCKET,
+            "Key": key,
+            "ContentType": f"image/{ext}",
+        },
+        ExpiresIn=300,  # 5분 안에만 업로드 가능
+    )
+
+    return {
+        "upload_url": upload_url,
+        "image_url": f"https://{CDN_DOMAIN}/{key}",
     }
