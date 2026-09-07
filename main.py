@@ -8,6 +8,7 @@ import bcrypt
 import jwt
 import boto3
 import uuid
+from botocore.config import Config  # 👈 [추가됨] 정확한 주소 생성을 위한 설정 모듈
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -20,7 +21,14 @@ DB_NAME = os.getenv("DB_NAME", "community_db")
 # S3 업로드 관련 설정
 UPLOAD_BUCKET = os.getenv("UPLOAD_BUCKET")
 CDN_DOMAIN = os.getenv("CDN_DOMAIN")
-s3_client = boto3.client("s3", region_name="ap-northeast-2")
+
+# 🚀 [핵심 수정!] 307 에러가 안 나도록 서울 전용 엔드포인트와 s3v4 서명을 쾅 박아줍니다.
+s3_client = boto3.client(
+    "s3",
+    region_name="ap-northeast-2",
+    endpoint_url="https://s3.ap-northeast-2.amazonaws.com",
+    config=Config(signature_version="s3v4")
+)
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:3306/{DB_NAME}"
